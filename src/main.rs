@@ -9,6 +9,101 @@ use ratatui::{
     widgets::{Block, List, ListItem, ListState, Padding},
 };
 
+fn normalize_url(s: &str) -> String {
+    if s.starts_with("http://") || s.starts_with("https://") {
+        s.to_string()
+    } else {
+        format!("https://{s}")
+    }
+}
+
+fn is_bare_domain(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    let path = rest.find('/').map(|i| &rest[i..]).unwrap_or("");
+    path.trim_matches('/').is_empty()
+}
+
+fn find_feed_link(html: &str, base_url: &str) -> Option<String> {
+    let base = base_url.trim_end_matches('/');
+    let lower = html.to_lowercase();
+    let mut pos = 0;
+    while let Some(tag_start) = lower[pos..].find("<link") {
+        let abs = pos + tag_start;
+        let tag_end = lower[abs..].find('>')? + abs;
+        let tag = &html[abs..=tag_end];
+        let tag_lower = tag.to_lowercase();
+        let is_feed =
+            tag_lower.contains("application/rss+xml") || tag_lower.contains("application/atom+xml");
+        if is_feed {
+            if let Some(href) = extract_attr(tag, "href") {
+                let resolved = if href.starts_with("http://") || href.starts_with("https://") {
+                    href
+                } else if href.starts_with('/') {
+                    format!("{base}{href}")
+                } else {
+                    format!("{base}/{href}")
+                };
+                return Some(resolved);
+            }
+        }
+        pos = tag_end + 1;
+    }
+    None
+}
+
+fn extract_attr(tag: &str, attr: &str) -> Option<String> {
+    let search = format!("{attr}=");
+    let lower = tag.to_lowercase();
+    let start = lower.find(&search)? + search.len();
+    let rest = &tag[start..];
+    let (quote, end_char) = if rest.starts_with('"') {
+        (&rest[1..], '"')
+    } else if rest.starts_with('\'') {
+        (&rest[1..], '\'')
+    } else {
+        return None;
+    };
+    let end = quote.find(end_char)?;
+    Some(quote[..end].to_string())
+}
+
+fn discover_feed(input: &str) -> color_eyre::Result<String> {
+    let url = normalize_url(input);
+    if !is_bare_domain(&url) {
+        return Ok(url);
+    }
+    let html = ureq::get(&url).call()?.body_mut().read_to_string()?;
+    if let Some(feed_url) = find_feed_link(&html, &url) {
+        return Ok(feed_url);
+    }
+    let base = url.trim_end_matches('/');
+    const PATHS: &[&str] = &[
+        "/feed.xml",
+        "/rss.xml",
+        "/atom.xml",
+        "/feed",
+        "/rss",
+        "/index.xml",
+        "/feeds/posts/default",
+        "/blog/feed.xml",
+        "/blog/rss.xml",
+    ];
+    for path in PATHS {
+        let candidate = format!("{base}{path}");
+        if ureq::get(&candidate)
+            .call()
+            .map(|r| r.status() == 200)
+            .unwrap_or(false)
+        {
+            return Ok(candidate);
+        }
+    }
+    Err(color_eyre::eyre::eyre!("No feed found for: {input}"))
+}
+
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let urls: Vec<String> = std::env::args().skip(1).collect();
@@ -19,7 +114,10 @@ fn main() -> color_eyre::Result<()> {
     }
     let feeds: Vec<ParsedFeed> = urls
         .iter()
-        .map(|url| parse_url(url, None, None, None))
+        .map(|url| -> color_eyre::Result<ParsedFeed> {
+            let resolved = discover_feed(url)?;
+            Ok(parse_url(&resolved, None, None, None)?)
+        })
         .collect::<Result<_, _>>()?;
 
     let mut entries: Vec<(&Entry, Option<&str>)> = feeds

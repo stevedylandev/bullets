@@ -8,6 +8,7 @@ edition = "2024"
 
 [dependencies]
 color-eyre = "0.6.3"
+ureq = "3"
 crossterm = "0.29.0"
 feedparser-rs = "0.5.3"
 open = "5"
