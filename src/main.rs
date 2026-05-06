@@ -85,7 +85,47 @@ fn fmt_date(raw: &str) -> String {
     format!("{} {}{}, {}", dt.format("%B"), day, suffix, dt.format("%Y"))
 }
 
+fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
+    if max_width == 0 {
+        return vec![text.to_string()];
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        if current.is_empty() {
+            current.push_str(word);
+        } else if current.len() + 1 + word.len() <= max_width {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(current);
+            current = word.to_string();
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
 fn render(frame: &mut Frame, entries: &[(&Entry, Option<&str>)], state: &mut ListState) {
+    let outer = frame.area();
+    let [_, center, _] = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Max(80),
+            Constraint::Fill(1),
+        ])
+        .areas(outer);
+
+    let block = Block::new().padding(Padding::symmetric(2, 1));
+    let inner = block.inner(center);
+    let title_width = inner.width.saturating_sub(2) as usize;
+
     let dim = Style::new().fg(Color::DarkGray);
     let author_style = Style::new()
         .fg(Color::DarkGray)
@@ -110,27 +150,21 @@ fn render(frame: &mut Frame, entries: &[(&Entry, Option<&str>)], state: &mut Lis
                 .and_then(|a| a.name.as_deref())
                 .or(*feed_title)
                 .unwrap_or("anon");
-            ListItem::new(Text::from(vec![
-                Line::from(vec![Span::raw(bar), Span::styled(date, dim)]),
-                Line::from(vec![Span::raw(bar), Span::raw(title.to_string())]),
-                Line::from(vec![Span::raw(bar), Span::styled(author.to_string(), author_style)]),
-                Line::from(""),
-            ]))
+
+            let mut lines = vec![Line::from(vec![Span::raw(bar), Span::styled(date, dim)])];
+            for wrapped in wrap_text(title, title_width) {
+                lines.push(Line::from(vec![Span::raw(bar), Span::raw(wrapped)]));
+            }
+            lines.push(Line::from(vec![
+                Span::raw(bar),
+                Span::styled(author.to_string(), author_style),
+            ]));
+            lines.push(Line::from(""));
+
+            ListItem::new(Text::from(lines))
         })
         .collect();
 
-    let outer = frame.area();
-    let [_, center, _] = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Fill(1),
-            Constraint::Max(80),
-            Constraint::Fill(1),
-        ])
-        .areas(outer);
-
-    let block = Block::new().padding(Padding::symmetric(2, 1));
-    let inner = block.inner(center);
     frame.render_widget(block, center);
     frame.render_stateful_widget(
         List::new(items)
