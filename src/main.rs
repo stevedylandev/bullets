@@ -13,7 +13,9 @@ fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let urls: Vec<String> = std::env::args().skip(1).collect();
     if urls.is_empty() {
-        return Err(color_eyre::eyre::eyre!("Usage: bullets <feed-url> [feed-url ...]"));
+        return Err(color_eyre::eyre::eyre!(
+            "Usage: bullets <feed-url> [feed-url ...]"
+        ));
     }
     let feeds: Vec<ParsedFeed> = urls
         .iter()
@@ -75,7 +77,12 @@ fn fmt_date(raw: &str) -> String {
     let Ok(dt) = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S UTC") else {
         return raw.to_string();
     };
-    let day = dt.format("%e").to_string().trim().parse::<u32>().unwrap_or(0);
+    let day = dt
+        .format("%e")
+        .to_string()
+        .trim()
+        .parse::<u32>()
+        .unwrap_or(0);
     let suffix = match day {
         1 | 21 | 31 => "st",
         2 | 22 => "nd",
