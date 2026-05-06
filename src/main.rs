@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 use crossterm::event::{KeyCode, KeyEvent};
-use feedparser_rs::{ParsedFeed, parse_url};
+use feedparser_rs::{Entry, ParsedFeed, parse_url};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout},
@@ -11,23 +11,35 @@ use ratatui::{
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    let url = std::env::args().nth(1).ok_or_else(|| {
-        color_eyre::eyre::eyre!("Usage: bullets <feed-url>")
-    })?;
-    let feed = parse_url(&url, None, None, None)?;
-    ratatui::run(|t| app(t, &feed))?;
+    let urls: Vec<String> = std::env::args().skip(1).collect();
+    if urls.is_empty() {
+        return Err(color_eyre::eyre::eyre!("Usage: bullets <feed-url> [feed-url ...]"));
+    }
+    let feeds: Vec<ParsedFeed> = urls
+        .iter()
+        .map(|url| parse_url(url, None, None, None))
+        .collect::<Result<_, _>>()?;
+
+    let mut entries: Vec<&Entry> = feeds.iter().flat_map(|f| f.entries.iter()).collect();
+    entries.sort_by(|a, b| {
+        let da = a.published.as_ref().map(|d| d.to_string());
+        let db = b.published.as_ref().map(|d| d.to_string());
+        db.cmp(&da)
+    });
+
+    ratatui::run(|t| app(t, &entries))?;
     Ok(())
 }
 
-fn app(terminal: &mut DefaultTerminal, feed: &ParsedFeed) -> std::io::Result<()> {
+fn app(terminal: &mut DefaultTerminal, entries: &[&Entry]) -> std::io::Result<()> {
     let mut state = ListState::default();
     state.select(Some(0));
 
     loop {
-        terminal.draw(|f| render(f, feed, &mut state))?;
+        terminal.draw(|f| render(f, entries, &mut state))?;
 
         if let crossterm::event::Event::Key(KeyEvent { code, .. }) = crossterm::event::read()? {
-            let len = feed.entries.len();
+            let len = entries.len();
             match code {
                 KeyCode::Char('q') => break,
                 KeyCode::Char('j') | KeyCode::Down => {
@@ -40,7 +52,7 @@ fn app(terminal: &mut DefaultTerminal, feed: &ParsedFeed) -> std::io::Result<()>
                 }
                 KeyCode::Enter => {
                     if let Some(i) = state.selected() {
-                        if let Some(url) = feed.entries[i].links.first().map(|l| l.href.as_str()) {
+                        if let Some(url) = entries[i].links.first().map(|l| l.href.as_str()) {
                             let _ = open::that(url);
                         }
                     }
@@ -67,7 +79,7 @@ fn fmt_date(raw: &str) -> String {
     format!("{} {}{}, {}", dt.format("%B"), day, suffix, dt.format("%Y"))
 }
 
-fn render(frame: &mut Frame, feed: &ParsedFeed, state: &mut ListState) {
+fn render(frame: &mut Frame, entries: &[&Entry], state: &mut ListState) {
     let dim = Style::new().fg(Color::DarkGray);
     let author_style = Style::new()
         .fg(Color::DarkGray)
@@ -75,8 +87,7 @@ fn render(frame: &mut Frame, feed: &ParsedFeed, state: &mut ListState) {
     let highlight = Style::new();
 
     let selected = state.selected();
-    let items: Vec<ListItem> = feed
-        .entries
+    let items: Vec<ListItem> = entries
         .iter()
         .enumerate()
         .map(|(i, e)| {
