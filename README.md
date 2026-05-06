@@ -8,6 +8,12 @@ Minimal terminal RSS reader. Pass one or more feed URLs, browse entries, open in
 bullets <feed-url> [feed-url ...]
 ```
 
+Or set feeds via environment variable (comma-separated):
+
+```sh
+export BULLETS_FEEDS=https://example.com/feed.xml,stevedylan.dev
+```
+
 Feed discovery included — bare domains (e.g. `stevedylan.dev`) are probed for RSS/Atom feeds automatically.
 
 ## Keybindings

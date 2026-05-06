@@ -106,11 +106,24 @@ fn discover_feed(input: &str) -> color_eyre::Result<String> {
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    let urls: Vec<String> = std::env::args().skip(1).collect();
+    let mut urls: Vec<String> = std::env::args().skip(1).collect();
     if urls.is_empty() {
-        return Err(color_eyre::eyre::eyre!(
-            "Usage: bullets <feed-url> [feed-url ...]"
-        ));
+        if let Ok(val) = std::env::var("BULLETS_FEEDS") {
+            urls = val
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+        }
+    }
+    if urls.is_empty() {
+        eprintln!("No feeds provided.\n");
+        eprintln!("Usage:");
+        eprintln!("  bullets <feed-url> [feed-url ...]");
+        eprintln!("  bullets https://example.com/feed.xml other.com/rss");
+        eprintln!("\nOr set the BULLETS_FEEDS environment variable:");
+        eprintln!("  export BULLETS_FEEDS=https://example.com/feed.xml,https://other.com/rss");
+        std::process::exit(1);
     }
     let feeds: Vec<ParsedFeed> = urls
         .iter()
