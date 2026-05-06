@@ -10,6 +10,8 @@ edition = "2024"
 color-eyre = "0.6.3"
 crossterm = "0.29.0"
 feedparser-rs = "0.5.3"
+open = "5"
+chrono = "0.4"
 ratatui = "0.30.0"
 
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
