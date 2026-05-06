@@ -20,10 +20,16 @@ fn main() -> color_eyre::Result<()> {
         .map(|url| parse_url(url, None, None, None))
         .collect::<Result<_, _>>()?;
 
-    let mut entries: Vec<&Entry> = feeds.iter().flat_map(|f| f.entries.iter()).collect();
+    let mut entries: Vec<(&Entry, Option<&str>)> = feeds
+        .iter()
+        .flat_map(|f| {
+            let title = f.feed.title.as_deref();
+            f.entries.iter().map(move |e| (e, title))
+        })
+        .collect();
     entries.sort_by(|a, b| {
-        let da = a.published.as_ref().map(|d| d.to_string());
-        let db = b.published.as_ref().map(|d| d.to_string());
+        let da = a.0.published.as_ref().map(|d| d.to_string());
+        let db = b.0.published.as_ref().map(|d| d.to_string());
         db.cmp(&da)
     });
 
@@ -31,7 +37,7 @@ fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn app(terminal: &mut DefaultTerminal, entries: &[&Entry]) -> std::io::Result<()> {
+fn app(terminal: &mut DefaultTerminal, entries: &[(&Entry, Option<&str>)]) -> std::io::Result<()> {
     let mut state = ListState::default();
     state.select(Some(0));
 
@@ -52,7 +58,7 @@ fn app(terminal: &mut DefaultTerminal, entries: &[&Entry]) -> std::io::Result<()
                 }
                 KeyCode::Enter => {
                     if let Some(i) = state.selected() {
-                        if let Some(url) = entries[i].links.first().map(|l| l.href.as_str()) {
+                        if let Some(url) = entries[i].0.links.first().map(|l| l.href.as_str()) {
                             let _ = open::that(url);
                         }
                     }
@@ -79,7 +85,7 @@ fn fmt_date(raw: &str) -> String {
     format!("{} {}{}, {}", dt.format("%B"), day, suffix, dt.format("%Y"))
 }
 
-fn render(frame: &mut Frame, entries: &[&Entry], state: &mut ListState) {
+fn render(frame: &mut Frame, entries: &[(&Entry, Option<&str>)], state: &mut ListState) {
     let dim = Style::new().fg(Color::DarkGray);
     let author_style = Style::new()
         .fg(Color::DarkGray)
@@ -90,7 +96,7 @@ fn render(frame: &mut Frame, entries: &[&Entry], state: &mut ListState) {
     let items: Vec<ListItem> = entries
         .iter()
         .enumerate()
-        .map(|(i, e)| {
+        .map(|(i, (e, feed_title))| {
             let bar = if selected == Some(i) { "▌ " } else { "  " };
             let date = e
                 .published
@@ -102,6 +108,7 @@ fn render(frame: &mut Frame, entries: &[&Entry], state: &mut ListState) {
                 .authors
                 .first()
                 .and_then(|a| a.name.as_deref())
+                .or(*feed_title)
                 .unwrap_or("anon");
             ListItem::new(Text::from(vec![
                 Line::from(vec![Span::raw(bar), Span::styled(date, dim)]),
