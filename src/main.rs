@@ -12,7 +12,7 @@ use ratatui::{
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
     let url = std::env::args().nth(1).ok_or_else(|| {
-        color_eyre::eyre::eyre!("Usage: bullet <feed-url>")
+        color_eyre::eyre::eyre!("Usage: bullets <feed-url>")
     })?;
     let feed = parse_url(&url, None, None, None)?;
     ratatui::run(|t| app(t, &feed))?;

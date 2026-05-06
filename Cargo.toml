@@ -1,5 +1,5 @@
 [package]
-name = "bullet"
+name = "bullets"
 version = "0.1.0"
 description = "Minimal RSS TUI"
 authors = ["Steve <contact@stevedylan.dev>"]
