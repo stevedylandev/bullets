@@ -1,6 +1,6 @@
 [package]
 name = "bullets"
-version = "0.1.0"
+version = "0.1.1"
 description = "Minimal RSS TUI"
 authors = ["Steve <contact@stevedylan.dev>"]
 license = "MIT"
