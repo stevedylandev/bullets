@@ -2,7 +2,7 @@
 
 # bullets
 
-![icon](https://files.stevedylan.dev/bullets-icon.png)
+![icon](https://files.stevedylan.dev/bullets-icon-2.png)
 
 Minimal terminal RSS reader. Pass one or more feed URLs, browse entries, open in browser.
 
@@ -37,4 +37,4 @@ Download latest binary from [releases](https://github.com/stevedylandev/bullets/
 
 ## License
 
-MIT — Copyright (c) Steve <contact@stevedylan.dev>
+[MIT](LICENSE)
