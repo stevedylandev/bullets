@@ -20,11 +20,19 @@ Designed to be the simplest RSS/Atom feed browser
 
 ## Install
 
+**Homebrew**
+
 ```
 brew install stevedylandev/tap/bullets
 ```
 
-Or download latest binary from [releases](https://github.com/stevedylandev/bullets/releases).
+**Cargo**
+
+```
+cargo install bullets
+```
+
+[**Other Install Methods**](https://github.com/stevedylandev/bullets/releases)
 
 ## Usage
 
