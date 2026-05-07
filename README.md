@@ -4,9 +4,23 @@
 
 ![icon](https://files.stevedylan.dev/bullets-icon-2.png)
 
-Minimal terminal RSS reader. Pass one or more feed URLs, browse entries, open in browser.
+Minimal terminal RSS/Atom interpreter. Pass one or more feed URLs, browse entries, open in browser.
 
 </div>
+
+## Philosophy
+
+![demo](https://files.stevedylan.dev/bullets-demo.png)
+
+Designed to be the simplest RSS/Atom feed interpreter
+
+- No read/unread
+- No cron, db, or notifications
+- No in-app reader
+
+## Install
+
+Download latest binary from [releases](https://github.com/stevedylandev/bullets/releases).
 
 ## Usage
 
@@ -30,10 +44,6 @@ Feed discovery included — bare domains (e.g. `stevedylan.dev`) are probed for 
 | `k` / `↑` | Prev entry |
 | `Enter` | Open in browser |
 | `q` | Quit |
-
-## Install
-
-Download latest binary from [releases](https://github.com/stevedylandev/bullets/releases).
 
 ## License
 
