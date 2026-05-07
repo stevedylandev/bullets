@@ -2,15 +2,13 @@
 
 # bullets
 
-![icon](https://files.stevedylan.dev/bullets-icon-2.png)
+![demo](https://files.stevedylan.dev/bullets-demo.png)
 
 Minimal terminal RSS/Atom feed browser. Pass one or more feed URLs, browse entries, open in browser.
 
 </div>
 
 ## Philosophy
-
-![demo](https://files.stevedylan.dev/bullets-demo.png)
 
 Designed to be the simplest RSS/Atom feed browser
 
