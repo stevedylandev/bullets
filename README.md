@@ -1,6 +1,12 @@
+<div align="center">
+
 # bullets
 
+![icon](https://files.stevedylan.dev/bullets-icon.png)
+
 Minimal terminal RSS reader. Pass one or more feed URLs, browse entries, open in browser.
+
+</div>
 
 ## Usage
 
@@ -27,9 +33,7 @@ Feed discovery included — bare domains (e.g. `stevedylan.dev`) are probed for 
 
 ## Install
 
-```sh
-cargo install --path .
-```
+Download latest binary from [releases](https://github.com/stevedylandev/bullets/releases).
 
 ## License
 
