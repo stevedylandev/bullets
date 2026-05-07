@@ -75,7 +75,18 @@ fn discover_feed(input: &str) -> color_eyre::Result<String> {
     if !is_bare_domain(&url) {
         return Ok(url);
     }
-    let html = ureq::get(&url).call()?.body_mut().read_to_string()?;
+    let timeout = std::time::Duration::from_secs(10);
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(timeout))
+        .build()
+        .into();
+    let html = ureq::Agent::new_with_config(agent)
+        .get(&url)
+        .call()
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to fetch {url}: {e}"))?
+        .body_mut()
+        .read_to_string()
+        .map_err(|e| color_eyre::eyre::eyre!("Failed to read response from {url}: {e}"))?;
     if let Some(feed_url) = find_feed_link(&html, &url) {
         return Ok(feed_url);
     }
@@ -95,7 +106,7 @@ fn discover_feed(input: &str) -> color_eyre::Result<String> {
         let candidate = format!("{base}{path}");
         if ureq::get(&candidate)
             .call()
-            .map(|r| r.status() == 200)
+            .map(|r: ureq::http::Response<ureq::Body>| r.status() == 200)
             .unwrap_or(false)
         {
             return Ok(candidate);
@@ -127,11 +138,28 @@ fn main() -> color_eyre::Result<()> {
     }
     let feeds: Vec<ParsedFeed> = urls
         .iter()
-        .map(|url| -> color_eyre::Result<ParsedFeed> {
-            let resolved = discover_feed(url)?;
-            Ok(parse_url(&resolved, None, None, None)?)
+        .filter_map(|url| {
+            let resolved = match discover_feed(url) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("warning: skipping {url}: {e}");
+                    return None;
+                }
+            };
+            match parse_url(&resolved, None, None, None) {
+                Ok(feed) => Some(feed),
+                Err(e) => {
+                    eprintln!("warning: failed to parse feed {url}: {e}");
+                    None
+                }
+            }
         })
-        .collect::<Result<_, _>>()?;
+        .collect();
+
+    if feeds.is_empty() {
+        eprintln!("No feeds loaded successfully.");
+        std::process::exit(1);
+    }
 
     let mut entries: Vec<(&Entry, Option<&str>)> = feeds
         .iter()
@@ -146,6 +174,10 @@ fn main() -> color_eyre::Result<()> {
         db.cmp(&da)
     });
 
+    if entries.is_empty() {
+        eprintln!("No entries found in any feed.");
+        std::process::exit(1);
+    }
     ratatui::run(|t| app(t, &entries))?;
     Ok(())
 }
@@ -162,7 +194,10 @@ fn app(terminal: &mut DefaultTerminal, entries: &[(&Entry, Option<&str>)]) -> st
             match code {
                 KeyCode::Char('q') => break,
                 KeyCode::Char('j') | KeyCode::Down => {
-                    let next = state.selected().map(|i| (i + 1).min(len - 1)).unwrap_or(0);
+                    let next = state
+                        .selected()
+                        .map(|i| (i + 1).min(len.saturating_sub(1)))
+                        .unwrap_or(0);
                     state.select(Some(next));
                 }
                 KeyCode::Char('k') | KeyCode::Up => {
