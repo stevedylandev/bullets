@@ -5,6 +5,8 @@ description = "Minimal RSS TUI"
 authors = ["Steve <contact@stevedylan.dev>"]
 license = "MIT"
 edition = "2024"
+repository = "https://github.com/stevedylandev/bullets"
+homepage = "https://github.com/stevedylandev/bullets"
 
 [dependencies]
 color-eyre = "0.6.3"
@@ -21,3 +23,8 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
