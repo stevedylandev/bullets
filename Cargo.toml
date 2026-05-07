@@ -9,7 +9,7 @@ repository = "https://github.com/stevedylandev/bullets"
 homepage = "https://github.com/stevedylandev/bullets"
 
 [dependencies]
-color-eyre = "0.6.3"
+color-eyre = "0.6.5"
 ureq = "3"
 crossterm = "0.29.0"
 feedparser-rs = "0.5.3"
