@@ -1,6 +1,7 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Datelike, Utc};
+use color_eyre::eyre::WrapErr;
 use crossterm::event::{KeyCode, KeyEvent};
-use feedparser_rs::{Entry, ParsedFeed, parse_url};
+use feedparser_rs::{ParsedFeed, parse_url};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout},
@@ -8,6 +9,14 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, List, ListItem, ListState, Padding},
 };
+
+struct Item {
+    title: String,
+    author: String,
+    date: String,
+    url: Option<String>,
+    published: Option<DateTime<Utc>>,
+}
 
 fn normalize_url(s: &str) -> String {
     if s.starts_with("http://") || s.starts_with("https://") {
@@ -18,12 +27,9 @@ fn normalize_url(s: &str) -> String {
 }
 
 fn is_bare_domain(url: &str) -> bool {
-    let rest = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(url);
-    let path = rest.find('/').map(|i| &rest[i..]).unwrap_or("");
-    path.trim_matches('/').is_empty()
+    let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    rest.split_once('/')
+        .map_or(true, |(_, p)| p.trim_matches('/').is_empty())
 }
 
 fn find_feed_link(html: &str, base_url: &str) -> Option<String> {
@@ -70,23 +76,25 @@ fn extract_attr(tag: &str, attr: &str) -> Option<String> {
     Some(quote[..end].to_string())
 }
 
-fn discover_feed(input: &str) -> color_eyre::Result<String> {
+fn build_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(10)))
+        .build()
+        .into()
+}
+
+fn discover_feed(agent: &ureq::Agent, input: &str) -> color_eyre::Result<String> {
     let url = normalize_url(input);
     if !is_bare_domain(&url) {
         return Ok(url);
     }
-    let timeout = std::time::Duration::from_secs(10);
-    let agent = ureq::Agent::config_builder()
-        .timeout_global(Some(timeout))
-        .build()
-        .into();
-    let html = ureq::Agent::new_with_config(agent)
+    let html = agent
         .get(&url)
         .call()
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to fetch {url}: {e}"))?
+        .wrap_err_with(|| format!("fetch {url}"))?
         .body_mut()
         .read_to_string()
-        .map_err(|e| color_eyre::eyre::eyre!("Failed to read response from {url}: {e}"))?;
+        .wrap_err_with(|| format!("read {url}"))?;
     if let Some(feed_url) = find_feed_link(&html, &url) {
         return Ok(feed_url);
     }
@@ -104,15 +112,60 @@ fn discover_feed(input: &str) -> color_eyre::Result<String> {
     ];
     for path in PATHS {
         let candidate = format!("{base}{path}");
-        if ureq::get(&candidate)
+        if agent
+            .get(&candidate)
             .call()
-            .map(|r: ureq::http::Response<ureq::Body>| r.status() == 200)
+            .map(|r| r.status() == 200)
             .unwrap_or(false)
         {
             return Ok(candidate);
         }
     }
     Err(color_eyre::eyre::eyre!("No feed found for: {input}"))
+}
+
+fn load_feeds(urls: &[String]) -> Vec<ParsedFeed> {
+    let agent = build_agent();
+    urls.iter()
+        .filter_map(|url| {
+            let resolved = discover_feed(&agent, url)
+                .map_err(|e| eprintln!("warning: skipping {url}: {e}"))
+                .ok()?;
+            parse_url(&resolved, None, None, None)
+                .map_err(|e| eprintln!("warning: failed to parse feed {url}: {e}"))
+                .ok()
+        })
+        .collect()
+}
+
+fn collect_items(feeds: Vec<ParsedFeed>) -> Vec<Item> {
+    let mut items: Vec<Item> = feeds
+        .into_iter()
+        .flat_map(|f| {
+            let feed_title = f.feed.title.clone();
+            f.entries.into_iter().map(move |e| {
+                let author = e
+                    .authors
+                    .first()
+                    .and_then(|a| a.name.as_ref().map(|n| n.to_string()))
+                    .or_else(|| feed_title.as_ref().map(|t| t.to_string()))
+                    .unwrap_or_else(|| "anon".into());
+                let date = e.published.map(fmt_date).unwrap_or_else(|| "-".into());
+                Item {
+                    title: e
+                        .title
+                        .map(|t| t.to_string())
+                        .unwrap_or_else(|| "(untitled)".into()),
+                    author,
+                    date,
+                    url: e.links.into_iter().next().map(|l| l.href.to_string()),
+                    published: e.published,
+                }
+            })
+        })
+        .collect();
+    items.sort_by(|a, b| b.published.cmp(&a.published));
+    items
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -136,61 +189,32 @@ fn main() -> color_eyre::Result<()> {
         eprintln!("  export BULLETS_FEEDS=https://example.com/feed.xml,https://other.com/rss");
         std::process::exit(1);
     }
-    let feeds: Vec<ParsedFeed> = urls
-        .iter()
-        .filter_map(|url| {
-            let resolved = match discover_feed(url) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("warning: skipping {url}: {e}");
-                    return None;
-                }
-            };
-            match parse_url(&resolved, None, None, None) {
-                Ok(feed) => Some(feed),
-                Err(e) => {
-                    eprintln!("warning: failed to parse feed {url}: {e}");
-                    None
-                }
-            }
-        })
-        .collect();
 
+    let feeds = load_feeds(&urls);
     if feeds.is_empty() {
         eprintln!("No feeds loaded successfully.");
         std::process::exit(1);
     }
 
-    let mut entries: Vec<(&Entry, Option<&str>)> = feeds
-        .iter()
-        .flat_map(|f| {
-            let title = f.feed.title.as_deref();
-            f.entries.iter().map(move |e| (e, title))
-        })
-        .collect();
-    entries.sort_by(|a, b| {
-        let da = a.0.published.as_ref().map(|d| d.to_string());
-        let db = b.0.published.as_ref().map(|d| d.to_string());
-        db.cmp(&da)
-    });
-
-    if entries.is_empty() {
+    let items = collect_items(feeds);
+    if items.is_empty() {
         eprintln!("No entries found in any feed.");
         std::process::exit(1);
     }
-    ratatui::run(|t| app(t, &entries))?;
+
+    ratatui::run(|t| app(t, &items))?;
     Ok(())
 }
 
-fn app(terminal: &mut DefaultTerminal, entries: &[(&Entry, Option<&str>)]) -> std::io::Result<()> {
+fn app(terminal: &mut DefaultTerminal, items: &[Item]) -> std::io::Result<()> {
     let mut state = ListState::default();
     state.select(Some(0));
 
     loop {
-        terminal.draw(|f| render(f, entries, &mut state))?;
+        terminal.draw(|f| render(f, items, &mut state))?;
 
         if let crossterm::event::Event::Key(KeyEvent { code, .. }) = crossterm::event::read()? {
-            let len = entries.len();
+            let len = items.len();
             match code {
                 KeyCode::Char('q') => break,
                 KeyCode::Char('j') | KeyCode::Down => {
@@ -206,7 +230,7 @@ fn app(terminal: &mut DefaultTerminal, entries: &[(&Entry, Option<&str>)]) -> st
                 }
                 KeyCode::Enter => {
                     if let Some(i) = state.selected() {
-                        if let Some(url) = entries[i].0.links.first().map(|l| l.href.as_str()) {
+                        if let Some(url) = items[i].url.as_deref() {
                             let _ = open::that(url);
                         }
                     }
@@ -219,16 +243,8 @@ fn app(terminal: &mut DefaultTerminal, entries: &[(&Entry, Option<&str>)]) -> st
     Ok(())
 }
 
-fn fmt_date(raw: &str) -> String {
-    let Ok(dt) = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S UTC") else {
-        return raw.to_string();
-    };
-    let day = dt
-        .format("%e")
-        .to_string()
-        .trim()
-        .parse::<u32>()
-        .unwrap_or(0);
+fn fmt_date(dt: DateTime<Utc>) -> String {
+    let day = dt.day();
     let suffix = match day {
         1 | 21 | 31 => "st",
         2 | 22 => "nd",
@@ -238,33 +254,7 @@ fn fmt_date(raw: &str) -> String {
     format!("{} {}{}, {}", dt.format("%B"), day, suffix, dt.format("%Y"))
 }
 
-fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
-    if max_width == 0 {
-        return vec![text.to_string()];
-    }
-    let mut lines: Vec<String> = Vec::new();
-    let mut current = String::new();
-    for word in text.split_whitespace() {
-        if current.is_empty() {
-            current.push_str(word);
-        } else if current.len() + 1 + word.len() <= max_width {
-            current.push(' ');
-            current.push_str(word);
-        } else {
-            lines.push(current);
-            current = word.to_string();
-        }
-    }
-    if !current.is_empty() {
-        lines.push(current);
-    }
-    if lines.is_empty() {
-        lines.push(String::new());
-    }
-    lines
-}
-
-fn render(frame: &mut Frame, entries: &[(&Entry, Option<&str>)], state: &mut ListState) {
+fn render(frame: &mut Frame, items: &[Item], state: &mut ListState) {
     let outer = frame.area();
     let [_, center, _] = Layout::default()
         .direction(Direction::Horizontal)
@@ -283,34 +273,23 @@ fn render(frame: &mut Frame, entries: &[(&Entry, Option<&str>)], state: &mut Lis
     let author_style = Style::new()
         .fg(Color::DarkGray)
         .add_modifier(Modifier::ITALIC);
-    let highlight = Style::new();
 
     let selected = state.selected();
-    let items: Vec<ListItem> = entries
+    let list_items: Vec<ListItem> = items
         .iter()
         .enumerate()
-        .map(|(i, (e, feed_title))| {
+        .map(|(i, item)| {
             let bar = if selected == Some(i) { "▌ " } else { "  " };
-            let date = e
-                .published
-                .as_ref()
-                .map(|d| fmt_date(&d.to_string()))
-                .unwrap_or_else(|| "-".into());
-            let title = e.title.as_deref().unwrap_or("(untitled)");
-            let author = e
-                .authors
-                .first()
-                .and_then(|a| a.name.as_deref())
-                .or(*feed_title)
-                .unwrap_or("anon");
-
-            let mut lines = vec![Line::from(vec![Span::raw(bar), Span::styled(date, dim)])];
-            for wrapped in wrap_text(title, title_width) {
-                lines.push(Line::from(vec![Span::raw(bar), Span::raw(wrapped)]));
+            let mut lines = vec![Line::from(vec![
+                Span::raw(bar),
+                Span::styled(item.date.clone(), dim),
+            ])];
+            for wrapped in textwrap::wrap(&item.title, title_width.max(1)) {
+                lines.push(Line::from(vec![Span::raw(bar), Span::raw(wrapped.into_owned())]));
             }
             lines.push(Line::from(vec![
                 Span::raw(bar),
-                Span::styled(author.to_string(), author_style),
+                Span::styled(item.author.clone(), author_style),
             ]));
             lines.push(Line::from(""));
 
@@ -319,11 +298,5 @@ fn render(frame: &mut Frame, entries: &[(&Entry, Option<&str>)], state: &mut Lis
         .collect();
 
     frame.render_widget(block, center);
-    frame.render_stateful_widget(
-        List::new(items)
-            .highlight_style(highlight)
-            .highlight_symbol(""),
-        inner,
-        state,
-    );
+    frame.render_stateful_widget(List::new(list_items).highlight_symbol(""), inner, state);
 }

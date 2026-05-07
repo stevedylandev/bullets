@@ -16,6 +16,7 @@ feedparser-rs = "0.5.3"
 open = "5"
 chrono = "0.4"
 ratatui = "0.30.0"
+textwrap = "0.16"
 
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
 [profile.release]
