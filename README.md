@@ -4,7 +4,7 @@
 
 ![icon](https://files.stevedylan.dev/bullets-icon-2.png)
 
-Minimal terminal RSS/Atom interpreter. Pass one or more feed URLs, browse entries, open in browser.
+Minimal terminal RSS/Atom feed browser. Pass one or more feed URLs, browse entries, open in browser.
 
 </div>
 
@@ -12,7 +12,7 @@ Minimal terminal RSS/Atom interpreter. Pass one or more feed URLs, browse entrie
 
 ![demo](https://files.stevedylan.dev/bullets-demo.png)
 
-Designed to be the simplest RSS/Atom feed interpreter
+Designed to be the simplest RSS/Atom feed browser
 
 - No read/unread
 - No cron, db, or notifications
@@ -20,7 +20,11 @@ Designed to be the simplest RSS/Atom feed interpreter
 
 ## Install
 
-Download latest binary from [releases](https://github.com/stevedylandev/bullets/releases).
+```
+brew install stevedylandev/tap/bullets
+```
+
+Or download latest binary from [releases](https://github.com/stevedylandev/bullets/releases).
 
 ## Usage
 
