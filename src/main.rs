@@ -285,7 +285,10 @@ fn render(frame: &mut Frame, items: &[Item], state: &mut ListState) {
                 Span::styled(item.date.clone(), dim),
             ])];
             for wrapped in textwrap::wrap(&item.title, title_width.max(1)) {
-                lines.push(Line::from(vec![Span::raw(bar), Span::raw(wrapped.into_owned())]));
+                lines.push(Line::from(vec![
+                    Span::raw(bar),
+                    Span::raw(wrapped.into_owned()),
+                ]));
             }
             lines.push(Line::from(vec![
                 Span::raw(bar),
