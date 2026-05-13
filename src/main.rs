@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, List, ListItem, ListState, Padding},
+    widgets::{Block, Padding, Paragraph},
 };
 
 struct Item {
@@ -207,32 +207,25 @@ fn main() -> color_eyre::Result<()> {
 }
 
 fn app(terminal: &mut DefaultTerminal, items: &[Item]) -> std::io::Result<()> {
-    let mut state = ListState::default();
-    state.select(Some(0));
+    let mut selected = 0;
+    let mut scroll_offset = 0;
 
     loop {
-        terminal.draw(|f| render(f, items, &mut state))?;
+        terminal.draw(|f| render(f, items, selected, &mut scroll_offset))?;
 
         if let crossterm::event::Event::Key(KeyEvent { code, .. }) = crossterm::event::read()? {
             let len = items.len();
             match code {
                 KeyCode::Char('q') => break,
                 KeyCode::Char('j') | KeyCode::Down => {
-                    let next = state
-                        .selected()
-                        .map(|i| (i + 1).min(len.saturating_sub(1)))
-                        .unwrap_or(0);
-                    state.select(Some(next));
+                    selected = (selected + 1).min(len.saturating_sub(1));
                 }
                 KeyCode::Char('k') | KeyCode::Up => {
-                    let prev = state.selected().map(|i| i.saturating_sub(1)).unwrap_or(0);
-                    state.select(Some(prev));
+                    selected = selected.saturating_sub(1);
                 }
                 KeyCode::Enter => {
-                    if let Some(i) = state.selected() {
-                        if let Some(url) = items[i].url.as_deref() {
-                            let _ = open::that(url);
-                        }
+                    if let Some(url) = items[selected].url.as_deref() {
+                        let _ = open::that(url);
                     }
                 }
                 _ => {}
@@ -254,13 +247,13 @@ fn fmt_date(dt: DateTime<Utc>) -> String {
     format!("{} {}{}, {}", dt.format("%B"), day, suffix, dt.format("%Y"))
 }
 
-fn render(frame: &mut Frame, items: &[Item], state: &mut ListState) {
+fn render(frame: &mut Frame, items: &[Item], selected: usize, scroll_offset: &mut u16) {
     let outer = frame.area();
     let [_, center, _] = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Fill(1),
-            Constraint::Max(80),
+            Constraint::Max(100),
             Constraint::Fill(1),
         ])
         .areas(outer);
@@ -274,32 +267,51 @@ fn render(frame: &mut Frame, items: &[Item], state: &mut ListState) {
         .fg(Color::DarkGray)
         .add_modifier(Modifier::ITALIC);
 
-    let selected = state.selected();
-    let list_items: Vec<ListItem> = items
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            let bar = if selected == Some(i) { "▌ " } else { "  " };
-            let mut lines = vec![Line::from(vec![
-                Span::raw(bar),
-                Span::styled(item.date.clone(), dim),
-            ])];
-            for wrapped in textwrap::wrap(&item.title, title_width.max(1)) {
-                lines.push(Line::from(vec![
-                    Span::raw(bar),
-                    Span::raw(wrapped.into_owned()),
-                ]));
-            }
+    let mut selected_start = 0;
+    let mut selected_end = 0;
+    let mut lines = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        if i == selected {
+            selected_start = lines.len();
+        }
+
+        let bar = if i == selected { "▌ " } else { "  " };
+        lines.push(Line::from(vec![
+            Span::raw(bar),
+            Span::styled(item.date.clone(), dim),
+        ]));
+        for wrapped in textwrap::wrap(&item.title, title_width.max(1)) {
             lines.push(Line::from(vec![
                 Span::raw(bar),
-                Span::styled(item.author.clone(), author_style),
+                Span::raw(wrapped.into_owned()),
             ]));
-            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(vec![
+            Span::raw(bar),
+            Span::styled(item.author.clone(), author_style),
+        ]));
+        lines.push(Line::from(""));
 
-            ListItem::new(Text::from(lines))
-        })
-        .collect();
+        if i == selected {
+            selected_end = lines.len();
+        }
+    }
+
+    let viewport_height = inner.height as usize;
+    if viewport_height > 0 {
+        let mut offset = *scroll_offset as usize;
+        if selected_start < offset {
+            offset = selected_start;
+        } else if selected_end > offset + viewport_height {
+            offset = selected_end.saturating_sub(viewport_height);
+        }
+        offset = offset.min(lines.len().saturating_sub(viewport_height));
+        *scroll_offset = offset.min(u16::MAX as usize) as u16;
+    }
 
     frame.render_widget(block, center);
-    frame.render_stateful_widget(List::new(list_items).highlight_symbol(""), inner, state);
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).scroll((*scroll_offset, 0)),
+        inner,
+    );
 }
