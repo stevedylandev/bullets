@@ -253,7 +253,7 @@ fn render(frame: &mut Frame, items: &[Item], selected: usize, scroll_offset: &mu
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Fill(1),
-            Constraint::Max(80),
+            Constraint::Max(100),
             Constraint::Fill(1),
         ])
         .areas(outer);
