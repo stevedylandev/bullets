@@ -662,9 +662,9 @@ dependencies = [
 
 [[package]]
 name = "feedparser-rs"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c57ad5a2ffdbba39ea8951714b965faeb701345e7f75b5c0e8a9afe71109a6c"
+checksum = "a04326606160807e68d90eb01848dc3942f16ce42c7b616d99226cc5a89eb889"
 dependencies = [
  "ammonia",
  "chrono",
@@ -1802,9 +1802,9 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.39.3"
+version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "721da970c312655cde9b4ffe0547f20a8494866a4af5ff51f18b7c633d0c870b"
+checksum = "2474bd2e5029e7ccb6abb2ba48cf2383a333851dedf495901544281590c7da7f"
 dependencies = [
  "memchr",
 ]
